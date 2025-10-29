@@ -1,0 +1,16 @@
+# UCNet_Steganalysis Requirements
+# Python 3.6.9 or higher
+
+# Core dependencies
+numpy>=1.19.0
+opencv-python>=4.5.0
+scipy>=1.5.0
+matplotlib>=3.3.0
+
+# Deep Learning Framework
+torch>=1.7.0
+torchvision>=0.8.0
+
+# Note: For CUDA support, install PyTorch with CUDA:
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu102
+# (Replace cu102 with your CUDA version, e.g., cu113, cu116, etc.)

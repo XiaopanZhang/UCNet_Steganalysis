@@ -2,6 +2,7 @@
 #!/usr/bin/env python3
 
 import os
+import sys
 import argparse
 import numpy as np
 #import pandas as pd
@@ -25,7 +26,9 @@ from torchvision import transforms
 from torch.nn.parameter import Parameter
 import torch.nn.functional as F
 
-from srm_filter_kernel import all_normalized_hpf_list
+# Add the High-pass filters directory to the Python path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'High-pass filters'))
+from srm_kernel_filters import all_normalized_hpf_list
 
 
 IMAGE_SIZE = 256
@@ -460,7 +463,7 @@ def main(args):
   BOSSBASE_STEGO_DIR = '/xxx/ALASKA_v2_JPG_256_QF{}_COLOR_{}_{}_noround'.format(JPEG_QUALITY, STEGANOGRAPHY, EMBEDDING_RATE)
   
   TRAIN_INDEX_PATH = 'index_list/alaska_train_index_14000.npy'
-  VALID_INDEX_PATH = 'index_list/alaska_valid_index_1000.npy'
+  VALID_INDEX_PATH = 'index_list/alaska_val_index_1000.npy'
   TEST_INDEX_PATH = 'index_list/alaska_test_index_5000.npy'
   
   LOAD_RATE = float(EMBEDDING_RATE) + 0.1
