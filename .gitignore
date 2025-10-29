@@ -27,7 +27,7 @@ MANIFEST
 *.pt
 *.pth
 *.ckpt
-!J-UNIWARD-pretrain-parameters.pt
+!**/J-UNIWARD-pretrain-parameters.pt
 
 # Training outputs
 UCNet_Spatial/
