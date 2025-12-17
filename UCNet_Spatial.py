@@ -93,7 +93,9 @@ class SRMConv2d(nn.Module):
         super(SRMConv2d, self).__init__()
         
         # Use first 30 SRM filters from all_normalized_hpf_list
-        filt_list = all_normalized_hpf_list[:30]
+        # 30 filters are used as they provide a good balance between feature richness
+        # and computational efficiency for steganalysis tasks
+        filt_list = all_normalized_hpf_list[:out_channels]
         
         # Pad filters to 5x5 if needed
         padded_filters = []
@@ -106,11 +108,13 @@ class SRMConv2d(nn.Module):
                 hpf_item = np.pad(hpf_item, pad_width=((row_1, row_2), (col_1, col_2)), mode='constant')
             padded_filters.append(hpf_item)
         
-        # Create SRM filter weights
-        srm_weight = nn.Parameter(torch.Tensor(padded_filters).view(30, 1, 5, 5), requires_grad=False)
+        # Create SRM convolution layer
+        self.srm_conv = nn.Conv2d(in_channels, out_channels, kernel_size=5, padding=2, bias=False)
         
-        self.srm_conv = nn.Conv2d(in_channels, 30, kernel_size=5, padding=2, bias=False)
-        self.srm_conv.weight = srm_weight
+        # Set SRM filter weights (frozen, non-trainable)
+        srm_weight = torch.Tensor(padded_filters).view(out_channels, in_channels, 5, 5)
+        self.srm_conv.weight.data = srm_weight
+        self.srm_conv.weight.requires_grad = False
         
     def forward(self, x):
         return self.srm_conv(x)
