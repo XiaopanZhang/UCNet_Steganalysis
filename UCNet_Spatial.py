@@ -171,7 +171,7 @@ class ImprovedPreprocessing(nn.Module):
         # 4. Process with 1x1 conv
         output = self.final_conv(concat_all)  # [B, 30, H, W]
         
-        return output  
+        return output
 
     
 class Type1a(nn.Module):
