@@ -85,7 +85,93 @@ class HPF(nn.Module):
         output = self.hpf(input)
         output = self.tlu(output)
 
-        return output  
+        return output
+
+
+class SRMConv2d(nn.Module):
+    def __init__(self, in_channels=1, out_channels=30):
+        super(SRMConv2d, self).__init__()
+        
+        # Use first 30 SRM filters from all_normalized_hpf_list
+        # 30 filters are used as they provide a good balance between feature richness
+        # and computational efficiency for steganalysis tasks
+        filt_list = all_normalized_hpf_list[:out_channels]
+        
+        # Pad filters to 5x5 if needed
+        padded_filters = []
+        for hpf_item in filt_list:
+            if hpf_item.shape[0] < 5:
+                row_1 = int((5 - hpf_item.shape[0]) / 2)
+                row_2 = int((5 - hpf_item.shape[0]) - row_1)
+                col_1 = int((5 - hpf_item.shape[1]) / 2)
+                col_2 = int((5 - hpf_item.shape[1]) - col_1)
+                hpf_item = np.pad(hpf_item, pad_width=((row_1, row_2), (col_1, col_2)), mode='constant')
+            padded_filters.append(hpf_item)
+        
+        # Create SRM convolution layer
+        self.srm_conv = nn.Conv2d(in_channels, out_channels, kernel_size=5, padding=2, bias=False)
+        
+        # Set SRM filter weights (frozen, non-trainable)
+        srm_weight = torch.Tensor(padded_filters).view(out_channels, in_channels, 5, 5)
+        self.srm_conv.weight.data = srm_weight
+        self.srm_conv.weight.requires_grad = False
+        
+    def forward(self, x):
+        return self.srm_conv(x)
+
+
+class ImprovedPreprocessing(nn.Module):
+    def __init__(self):
+        super(ImprovedPreprocessing, self).__init__()
+        
+        # TLU for channel differences
+        self.tlu = TLU(2.0)
+        
+        # SRM filters for each RGB channel
+        self.srm_r = SRMConv2d(in_channels=1, out_channels=30)
+        self.srm_g = SRMConv2d(in_channels=1, out_channels=30)
+        self.srm_b = SRMConv2d(in_channels=1, out_channels=30)
+        
+        # 1x1 conv to compress 90 SRM channels to 30
+        self.compress = nn.Conv2d(90, 30, kernel_size=1, bias=False)
+        
+        # 1x1 conv to process concatenated 33 channels
+        self.final_conv = nn.Conv2d(33, 30, kernel_size=1, bias=False)
+        
+    def forward(self, input):
+        # Input: [B, 3, H, W] RGB image
+        
+        # Separate RGB channels
+        r = input[:, 0:1, :, :]  # [B, 1, H, W]
+        g = input[:, 1:2, :, :]  # [B, 1, H, W]
+        b = input[:, 2:3, :, :]  # [B, 1, H, W]
+        
+        # 1. Inter-channel differences with TLU
+        diff_rg = self.tlu(r - g)  # R-G
+        diff_gb = self.tlu(g - b)  # G-B
+        diff_br = self.tlu(b - r)  # B-R
+        
+        # 2. Apply 30 SRM filters to each RGB channel
+        srm_r_out = self.srm_r(r)      # [B, 30, H, W]
+        srm_g_out = self.srm_g(g)      # [B, 30, H, W]
+        srm_b_out = self.srm_b(b)      # [B, 30, H, W]
+        
+        # Concatenate all SRM outputs: 90 channels
+        srm_concat = torch.cat([srm_r_out, srm_g_out, srm_b_out], dim=1)  # [B, 90, H, W]
+        
+        # Apply TLU to SRM outputs
+        srm_concat = self.tlu(srm_concat)
+        
+        # Compress 90 channels to 30 with 1x1 conv
+        srm_compressed = self.compress(srm_concat)  # [B, 30, H, W]
+        
+        # 3. Concatenate diff channels (3) and compressed SRM channels (30)
+        concat_all = torch.cat([diff_rg, diff_gb, diff_br, srm_compressed], dim=1)  # [B, 33, H, W]
+        
+        # 4. Process with 1x1 conv
+        output = self.final_conv(concat_all)  # [B, 30, H, W]
+        
+        return output
 
     
 class Type1a(nn.Module):
@@ -194,9 +280,9 @@ class Net(nn.Module):
   def __init__(self):
     super(Net, self).__init__()
     
-    self.pre = HPF()
+    self.pre = ImprovedPreprocessing()
 
-    self.group1 = Type1a(186,32)
+    self.group1 = Type1a(30,32)
     self.group2 = Type2(32,32)
     self.group3 = Type3(32,64)
     self.group4 = Type2(64,128)
@@ -206,19 +292,8 @@ class Net(nn.Module):
     self.fc1 = nn.Linear(1 * 1 * 256, 2)
 
   def forward(self, input):
-    output = input
-    
-    # seperate color channels
-    output_c1 = output[:, 0, :, :]
-    output_c2 = output[:, 1, :, :] 
-    output_c3 = output[:, 2, :, :] 
-    out_c1 = output_c1.unsqueeze(1)
-    out_c2 = output_c2.unsqueeze(1)
-    out_c3 = output_c3.unsqueeze(1)
-    c1 = self.pre(out_c1)
-    c2 = self.pre(out_c2)
-    c3 = self.pre(out_c3)
-    output = torch.cat([c1, c2, c3], dim=1)
+    # Input: [B, 3, H, W] RGB image
+    output = self.pre(input)  # [B, 30, H, W]
     
     output = self.group1(output)
     output = self.group2(output)
